@@ -4,8 +4,9 @@ defaults:
   - _self_
 
 provider: "qwen"
-model_name: "qwen-3"
-base_url: "https://your-api.com/v1"
+model_name: "qwen3-max"
+base_url: ${oc.env:DASHSCOPE_BASE_URL, "https://dashscope.aliyuncs.com/compatible-mode/v1"}
+api_key: ${oc.env:DASHSCOPE_API_KEY, ""}
 max_context_length: 262144
 max_tokens: 16384
 top_p: 0.95

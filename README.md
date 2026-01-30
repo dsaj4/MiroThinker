@@ -347,7 +347,7 @@ cd apps/miroflow-agent
 uv sync
 
 # Configure API keys
-cp .env.example .env
+cp .env .env
 # Edit .env with your API keys (SERPER_API_KEY, JINA_API_KEY, E2B_API_KEY, etc.)
 ```
 
@@ -506,7 +506,7 @@ uv run main.py llm=qwen-3 agent=my_custom_config llm.base_url=https://your_base_
 
    ```bash
    cd apps/miroflow-agent
-   cp .env.example .env
+   cp .env .env
    # Edit .env with your actual API keys
    ```
 

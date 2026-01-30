@@ -1,7 +1,7 @@
 # conf/config.yaml
 defaults:
-  - llm: default
-  - agent: default
+  - llm: qwen-3
+  - agent: mirothinker_v1.5_keep5_max200
   - benchmark: default
   - _self_  # Allows variables to be defined at the top of this file
 
