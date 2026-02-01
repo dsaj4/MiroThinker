@@ -457,7 +457,15 @@ class OpenAIClient(BaseClient):
         summary_lines.append(f"Total Cache Input Tokens: {cache_input}")
         summary_lines.append(f"Total Output Tokens: {total_output}")
         summary_lines.append("-" * (40 + len(" Token Usage ")))
-        summary_lines.append("Pricing is disabled - no cost information available")
+
+        billing = self.get_billing_summary()
+        if billing.get("total_cost") is not None:
+            currency = billing.get("currency", "USD")
+            summary_lines.append(
+                f"Total Cost: {currency} {billing['total_cost']:.6f}"
+            )
+        else:
+            summary_lines.append("Pricing is disabled - no cost information available")
         summary_lines.append("-" * (40 + len(" Token Usage ")))
 
         # Generate log string

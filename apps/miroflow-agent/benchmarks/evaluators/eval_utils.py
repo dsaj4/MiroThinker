@@ -18,6 +18,20 @@ load_dotenv()
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")
 
+# Judge model configuration (override hardcoded defaults via env)
+JUDGE_MODEL_NAME = os.environ.get("JUDGE_MODEL_NAME", "gpt-4.1-2025-04-14")
+JUDGE_MODEL_NAME_SIMPLEQA = os.environ.get(
+    "JUDGE_MODEL_NAME_SIMPLEQA", JUDGE_MODEL_NAME
+)
+JUDGE_MODEL_NAME_HLE = os.environ.get("JUDGE_MODEL_NAME_HLE", "o3-mini-2025-01-31")
+JUDGE_MODEL_NAME_BROWSECOMP = os.environ.get(
+    "JUDGE_MODEL_NAME_BROWSECOMP", JUDGE_MODEL_NAME
+)
+JUDGE_MODEL_NAME_XBENCH = os.environ.get("JUDGE_MODEL_NAME_XBENCH", JUDGE_MODEL_NAME)
+JUDGE_MODEL_NAME_DEEPSEARCHQA = os.environ.get(
+    "JUDGE_MODEL_NAME_DEEPSEARCHQA", JUDGE_MODEL_NAME
+)
+
 evaluation_llm_client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 model_as_a_judge_client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
@@ -127,7 +141,9 @@ async def verify_answer_simpleqa(
 
     try:
         llm_response = await evaluation_llm_client.chat.completions.create(
-            model="gpt-4.1-2025-04-14", messages=messages, max_completion_tokens=2
+            model=JUDGE_MODEL_NAME_SIMPLEQA,
+            messages=messages,
+            max_completion_tokens=2,
         )
         content = llm_response.choices[0].message.content
         match = re.search(r"(A|B|C)", content)
@@ -189,7 +205,7 @@ async def verify_answer_hle(question: str, target: str, predicted_answer: str) -
 
     try:
         response = await evaluation_llm_client.beta.chat.completions.parse(
-            model="o3-mini-2025-01-31",
+            model=JUDGE_MODEL_NAME_HLE,
             max_completion_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
             response_format=HLEExtractedAnswer,
@@ -369,7 +385,7 @@ async def verify_answer_gaia_validation_text_103(
     for attempt in range(max_tries):
         try:
             response = await evaluation_llm_client.chat.completions.create(
-                model="gpt-4.1-2025-04-14",
+                model=JUDGE_MODEL_NAME,
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -555,7 +571,7 @@ async def verify_answer_browsecomp(
 
     try:
         response = await evaluation_llm_client.chat.completions.create(
-            model="gpt-4.1-2025-04-14",
+            model=JUDGE_MODEL_NAME_BROWSECOMP,
             messages=[{"role": "user", "content": prompt}],
             max_completion_tokens=2,
         )
@@ -595,7 +611,7 @@ async def verify_answer_browsecomp_zh(
 
     try:
         response = await evaluation_llm_client.chat.completions.create(
-            model="gpt-4.1-2025-04-14",
+            model=JUDGE_MODEL_NAME_BROWSECOMP,
             messages=[{"role": "user", "content": prompt}],
             max_completion_tokens=2,
         )
@@ -674,7 +690,7 @@ async def verify_answer_xbench_deepsearch(
     )
     try:
         response = await evaluation_llm_client.chat.completions.create(
-            model="gpt-4.1-2025-04-14",
+            model=JUDGE_MODEL_NAME_XBENCH,
             messages=[{"role": "user", "content": judge_prompt}],
         )
         judge_response = response.choices[0].message.content
@@ -828,7 +844,7 @@ async def verify_answer_deepsearchqa(
 
     try:
         response = await evaluation_llm_client.chat.completions.create(
-            model="gpt-4.1-2025-04-14",
+            model=JUDGE_MODEL_NAME_DEEPSEARCHQA,
             messages=[{"role": "user", "content": judge_prompt}],
         )
         judge_response = response.choices[0].message.content

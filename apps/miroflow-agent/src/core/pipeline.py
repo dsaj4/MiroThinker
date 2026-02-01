@@ -12,6 +12,7 @@ The pipeline orchestrates the interaction between LLM clients, tool managers,
 and the orchestrator to execute complex multi-turn agent tasks.
 """
 
+import time
 import traceback
 import uuid
 from typing import Any, Dict, List, Optional
@@ -70,6 +71,9 @@ async def execute_task_pipeline(
         - log_file_path: The path to the saved task log file.
         - failure_experience_summary: Summary of failure experience for retry (None if successful).
     """
+    # Measure end-to-end execution time
+    start_perf = time.perf_counter()
+
     # Create task log
     task_log = TaskLog(
         log_dir=log_dir,
@@ -164,6 +168,7 @@ async def execute_task_pipeline(
         return error_message, "", log_file_path, None
 
     finally:
+        elapsed_ms = int((time.perf_counter() - start_perf) * 1000)
         task_log.end_time = get_utc_plus_8_time()
 
         # Record task summary to structured log
@@ -171,6 +176,12 @@ async def execute_task_pipeline(
             "info",
             "task_execution_finished",
             f"Task {task_id} execution completed with status: {task_log.status}",
+        )
+        task_log.trace_data["elapsed_ms"] = elapsed_ms
+        task_log.log_step(
+            "info",
+            "Main Agent | Timing Summary",
+            f"Total elapsed time: {elapsed_ms} ms",
         )
         task_log.save()
 

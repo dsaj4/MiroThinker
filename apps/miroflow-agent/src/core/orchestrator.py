@@ -1182,6 +1182,21 @@ class Orchestrator:
             "info", "Main Agent | Usage Calculation", f"Usage log: {usage_log}"
         )
 
+        billing = self.llm_client.get_billing_summary()
+        billing_msg = (
+            f"Input tokens: {billing['input_tokens']}, "
+            f"Output tokens: {billing['output_tokens']}, "
+            f"Cache read tokens: {billing['cache_read_tokens']}, "
+            f"Cache write tokens: {billing['cache_write_tokens']}"
+        )
+        if billing.get("total_cost") is not None:
+            billing_msg += f", Total cost: {billing['currency']} {billing['total_cost']:.6f}"
+        else:
+            billing_msg += ", Pricing not configured"
+        self.task_log.log_step(
+            "info", "Main Agent | Billing Summary", billing_msg
+        )
+
         self.task_log.log_step(
             "info",
             "Main Agent | Final boxed answer",

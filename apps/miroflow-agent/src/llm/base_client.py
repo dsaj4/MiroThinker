@@ -74,6 +74,8 @@ class BaseClient(ABC):
     client: Any = dataclasses.field(init=False)
     token_usage: TokenUsage = dataclasses.field(init=False)
     last_call_tokens: Dict[str, int] = dataclasses.field(init=False)
+    pricing: Dict[str, Any] = dataclasses.field(init=False)
+    currency: str = dataclasses.field(init=False)
 
     def __post_init__(self):
         # Initialize last_call_tokens before other operations
@@ -98,6 +100,10 @@ class BaseClient(ABC):
         self.use_tool_calls: Optional[bool] = self.cfg.llm.get("use_tool_calls")
         self.repetition_penalty: float = self.cfg.llm.get("repetition_penalty", 1.0)
 
+        # Optional pricing configuration (per 1K tokens)
+        self.pricing = self.cfg.llm.get("pricing", {}) or {}
+        self.currency = self.pricing.get("currency", "USD")
+
         self.token_usage = self._reset_token_usage()
         self.client = self._create_client()
 
@@ -120,6 +126,49 @@ class BaseClient(ABC):
             total_cache_write_input_tokens=0,
             total_cache_read_input_tokens=0,
         )
+
+    def _compute_cost(self, tokens: int, rate_per_1k: Optional[float]) -> Optional[float]:
+        if rate_per_1k is None:
+            return None
+        return (tokens / 1000.0) * rate_per_1k
+
+    def get_billing_summary(self) -> Dict[str, Any]:
+        """Return aggregated token usage and optional cost totals."""
+        usage = self.get_token_usage()
+        input_tokens = usage.get("total_input_tokens", 0)
+        output_tokens = usage.get("total_output_tokens", 0)
+        cache_read_tokens = usage.get("total_cache_read_input_tokens", 0)
+        cache_write_tokens = usage.get("total_cache_write_input_tokens", 0)
+
+        input_rate = self.pricing.get("input_per_1k")
+        output_rate = self.pricing.get("output_per_1k")
+        cache_read_rate = self.pricing.get("cache_read_per_1k")
+        cache_write_rate = self.pricing.get("cache_write_per_1k")
+
+        costs = []
+        input_cost = self._compute_cost(input_tokens, input_rate)
+        output_cost = self._compute_cost(output_tokens, output_rate)
+        cache_read_cost = self._compute_cost(cache_read_tokens, cache_read_rate)
+        cache_write_cost = self._compute_cost(cache_write_tokens, cache_write_rate)
+
+        for item in [input_cost, output_cost, cache_read_cost, cache_write_cost]:
+            if item is not None:
+                costs.append(item)
+
+        total_cost = sum(costs) if costs else None
+
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "currency": self.currency,
+            "input_cost": input_cost,
+            "output_cost": output_cost,
+            "cache_read_cost": cache_read_cost,
+            "cache_write_cost": cache_write_cost,
+            "total_cost": total_cost,
+        }
 
     def _remove_tool_result_from_messages(
         self, messages, keep_tool_result
