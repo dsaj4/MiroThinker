@@ -10,6 +10,7 @@ by coordinating between the main agent, sub-agents, and various tools.
 
 import asyncio
 import gc
+import json
 import logging
 import time
 import uuid
@@ -176,6 +177,18 @@ class Orchestrator:
             "message_history": message_history,
         }
         self.task_log.save()
+
+    def _extract_search_data(self) -> List[Dict[str, Any]]:
+        """Collect search-related tool calls from trace_data."""
+        tool_calls = self.task_log.trace_data.get("tool_calls", [])
+        if not tool_calls:
+            return []
+        search_data = []
+        for call in tool_calls:
+            tool_name = call.get("tool_name", "")
+            if "search" in tool_name or "scrape" in tool_name:
+                search_data.append(call)
+        return search_data
 
     async def _handle_response_format_issues(
         self,
@@ -616,6 +629,11 @@ class Orchestrator:
 
             if should_rollback_turn:
                 continue
+
+            if tool_calls_data:
+                self.task_log.trace_data.setdefault("tool_calls", []).extend(
+                    tool_calls_data
+                )
 
             # Reset consecutive rollbacks on successful execution
             if consecutive_rollbacks > 0:
@@ -1088,6 +1106,11 @@ class Orchestrator:
             if should_rollback_turn:
                 continue
 
+            if tool_calls_data:
+                self.task_log.trace_data.setdefault("tool_calls", []).extend(
+                    tool_calls_data
+                )
+
             # Reset consecutive rollbacks on successful execution
             if consecutive_rollbacks > 0:
                 self.task_log.log_step(
@@ -1147,6 +1170,18 @@ class Orchestrator:
                 "Main Agent | Main Loop Completed",
                 f"Main loop completed after {turn_count} turns",
             )
+
+        output_mode = self.cfg.agent.get("output_mode", "report")
+        if output_mode == "search_data":
+            search_data = self._extract_search_data()
+            self.task_log.trace_data["search_data"] = search_data
+            self.task_log.log_step(
+                "info",
+                "Main Agent | Search Data",
+                f"Collected {len(search_data)} search-related tool calls",
+            )
+            await self.stream.end_workflow(workflow_id)
+            return json.dumps(search_data, ensure_ascii=False), "", None
 
         # Final summary
         self.task_log.log_step(
