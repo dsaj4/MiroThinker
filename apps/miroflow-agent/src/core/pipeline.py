@@ -30,6 +30,7 @@ from ..logging.task_logger import (
     TaskLog,
     get_utc_plus_8_time,
 )
+from ..memory.manager import MemoryManager
 from .orchestrator import Orchestrator
 
 
@@ -95,7 +96,13 @@ async def execute_task_pipeline(
         for sub_agent_tool_manager in sub_agent_tool_managers.values():
             sub_agent_tool_manager.set_task_log(task_log)
 
+    memory_manager = None
+    llm_client = None
     try:
+        # Initialize memory manager
+        memory_manager = MemoryManager(cfg=cfg, task_log=task_log)
+        await memory_manager.warmup()
+
         # Initialize LLM client
         random_uuid = str(uuid.uuid4())
         unique_id = f"{task_id}-{random_uuid}"
@@ -112,6 +119,7 @@ async def execute_task_pipeline(
             stream_queue=stream_queue,
             tool_definitions=tool_definitions,
             sub_agent_tool_definitions=sub_agent_tool_definitions,
+            memory_manager=memory_manager,
         )
 
         (
@@ -123,8 +131,6 @@ async def execute_task_pipeline(
             task_file_name=task_file_name,
             task_id=task_id,
         )
-
-        llm_client.close()
 
         task_log.final_boxed_answer = final_boxed_answer
         task_log.status = "success"
@@ -168,6 +174,16 @@ async def execute_task_pipeline(
         return error_message, "", log_file_path, None
 
     finally:
+        if llm_client is not None:
+            try:
+                llm_client.close()
+            except Exception:
+                pass
+        if memory_manager is not None:
+            try:
+                memory_manager.close()
+            except Exception:
+                pass
         elapsed_ms = int((time.perf_counter() - start_perf) * 1000)
         task_log.end_time = get_utc_plus_8_time()
 

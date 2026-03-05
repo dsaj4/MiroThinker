@@ -2,7 +2,6 @@
 defaults:
   - llm: qwen-3
   - agent: mirothinker_v1.5_keep5_max200
-  - benchmark: default
   - _self_  # Allows variables to be defined at the top of this file
 
 hydra:
@@ -12,3 +11,22 @@ hydra:
 # You can define some top-level or default parameters here
 project_name: "miroflow-agent"
 debug_dir: "../../logs/debug"
+
+memory:
+  enabled: true
+  semantic_recall: true
+  update_soul: true
+  short_circuit_search_on_hit: false
+  recall_top_k: 5
+  inject_top_k: 4
+  recall_min_score: 0.45
+  max_hit_chars: 420
+  max_context_chars: 3200
+  root_dir: "../../memory"
+  soul_file: "SOUL.md"
+  memory_file: "MEMORY.md"
+  milvus_uri: ${oc.env:MILVUS_URI, "../../memory/index/memsearch.db"}
+  milvus_token: ${oc.env:MILVUS_TOKEN, ""}
+  collection: "mirothinker_memory"
+  embedding_provider: "openai"
+  embedding_model: null

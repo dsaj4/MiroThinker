@@ -26,6 +26,7 @@ from ..io.input_handler import process_input
 from ..io.output_formatter import OutputFormatter
 from ..llm.base_client import BaseClient
 from ..logging.task_logger import TaskLog, get_utc_plus_8_time
+from ..memory.manager import MemoryManager
 from ..utils.parsing_utils import extract_llm_response_text
 from ..utils.prompt_utils import (
     generate_agent_specific_system_prompt,
@@ -103,6 +104,7 @@ class Orchestrator:
         stream_queue: Optional[Any] = None,
         tool_definitions: Optional[List[Dict[str, Any]]] = None,
         sub_agent_tool_definitions: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+        memory_manager: Optional[MemoryManager] = None,
     ):
         """
         Initialize the orchestrator.
@@ -127,6 +129,7 @@ class Orchestrator:
         self.stream_queue = stream_queue
         self.tool_definitions = tool_definitions
         self.sub_agent_tool_definitions = sub_agent_tool_definitions
+        self.memory_manager = memory_manager
 
         # Initialize sub-agent tool list function
         self._list_sub_agent_tools = None
@@ -294,18 +297,49 @@ class Orchestrator:
             agent_name: Name of the agent for logging
 
         Returns:
-            Tuple of (is_duplicate, should_rollback, turn_count, consecutive_rollbacks, message_history)
+            Tuple of (is_duplicate, should_rollback, turn_count, consecutive_rollbacks, message_history, arguments)
         """
         query_str = self.tool_executor.get_query_str_from_tool_call(
             tool_name, arguments
         )
         if not query_str:
-            return False, False, turn_count, consecutive_rollbacks, message_history
+            return (
+                False,
+                False,
+                turn_count,
+                consecutive_rollbacks,
+                message_history,
+                arguments,
+            )
 
         self.used_queries.setdefault(cache_name, defaultdict(int))
         count = self.used_queries[cache_name][query_str]
 
         if count > 0:
+            diversified_arguments = self.tool_executor.diversify_duplicate_query(
+                tool_name=tool_name,
+                arguments=arguments,
+                attempt_index=count + 1,
+            )
+            diversified_query_str = self.tool_executor.get_query_str_from_tool_call(
+                tool_name, diversified_arguments
+            )
+            if diversified_query_str and diversified_query_str != query_str:
+                self.task_log.log_step(
+                    "warning",
+                    f"{agent_name} | Turn: {turn_count} | Query Diversify",
+                    f"Duplicate query auto-diversified - tool: {tool_name}, "
+                    f"old: '{query_str}', new: '{diversified_query_str}', previous count: {count}",
+                )
+                return (
+                    True,
+                    False,
+                    turn_count,
+                    consecutive_rollbacks,
+                    message_history,
+                    diversified_arguments,
+                )
+
             if consecutive_rollbacks < self.MAX_CONSECUTIVE_ROLLBACKS - 1:
                 message_history.pop()
                 turn_count -= 1
@@ -317,7 +351,14 @@ class Orchestrator:
                     f"previous count: {count}. Consecutive rollbacks: {consecutive_rollbacks}/"
                     f"{self.MAX_CONSECUTIVE_ROLLBACKS}, Total attempts: {total_attempts}/{max_attempts}",
                 )
-                return True, True, turn_count, consecutive_rollbacks, message_history
+                return (
+                    True,
+                    True,
+                    turn_count,
+                    consecutive_rollbacks,
+                    message_history,
+                    arguments,
+                )
             else:
                 self.task_log.log_step(
                     "warning",
@@ -326,7 +367,14 @@ class Orchestrator:
                     f"tool: {tool_name}, query: '{query_str}', previous count: {count}",
                 )
 
-        return False, False, turn_count, consecutive_rollbacks, message_history
+        return (
+            False,
+            False,
+            turn_count,
+            consecutive_rollbacks,
+            message_history,
+            arguments,
+        )
 
     async def _record_query(self, cache_name: str, tool_name: str, arguments: dict):
         """Record a successful query execution."""
@@ -389,6 +437,13 @@ class Orchestrator:
             date=date.today(),
             mcp_servers=tool_definitions,
         ) + generate_agent_specific_system_prompt(agent_type=sub_agent_name)
+        if self.memory_manager and self.memory_manager.enabled:
+            memory_context = await self.memory_manager.build_system_memory_context(
+                task_description=task_description,
+                task_file_name="",
+            )
+            if memory_context:
+                system_prompt = f"{system_prompt}\n\n{memory_context}"
 
         # Limit sub-agent turns
         if self.cfg.agent.sub_agents:
@@ -521,6 +576,7 @@ class Orchestrator:
                         turn_count,
                         consecutive_rollbacks,
                         message_history,
+                        arguments,
                     ) = await self._check_duplicate_query(
                         tool_name,
                         arguments,
@@ -539,10 +595,32 @@ class Orchestrator:
                     # Send stream event
                     tool_call_id = await self.stream.tool_call(tool_name, arguments)
 
-                    # Execute tool call
-                    tool_result = await self.sub_agent_tool_managers[
-                        sub_agent_name
-                    ].execute_tool_call(server_name, tool_name, arguments)
+                    # Pre-search memory recall before external retrieval
+                    memory_tool_result = None
+                    if self.memory_manager and self.memory_manager.enabled:
+                        memory_tool_result = (
+                            await self.memory_manager.maybe_short_circuit_search(
+                                tool_name=tool_name,
+                                arguments=arguments,
+                            )
+                        )
+
+                    if memory_tool_result is not None:
+                        tool_result = {
+                            "server_name": server_name,
+                            "tool_name": tool_name,
+                            **memory_tool_result,
+                        }
+                        self.task_log.log_step(
+                            "info",
+                            f"{sub_agent_name} | Turn: {turn_count} | Memory Recall",
+                            f"Short-circuited external search using memory for tool: {tool_name}",
+                        )
+                    else:
+                        # Execute external tool call
+                        tool_result = await self.sub_agent_tool_managers[
+                            sub_agent_name
+                        ].execute_tool_call(server_name, tool_name, arguments)
 
                     # Update query count if successful
                     if "error" not in tool_result:
@@ -811,6 +889,18 @@ class Orchestrator:
             date=date.today(),
             mcp_servers=tool_definitions,
         ) + generate_agent_specific_system_prompt(agent_type="main")
+        if self.memory_manager and self.memory_manager.enabled:
+            memory_context = await self.memory_manager.build_system_memory_context(
+                task_description=task_description,
+                task_file_name=task_file_name,
+            )
+            if memory_context:
+                system_prompt = f"{system_prompt}\n\n{memory_context}"
+                self.task_log.log_step(
+                    "info",
+                    "Memory | Prompt Injection",
+                    "Injected planner soul and recalled memory context into system prompt.",
+                )
         system_prompt = system_prompt.strip()
 
         # Main loop configuration
@@ -943,6 +1033,7 @@ class Orchestrator:
                             turn_count,
                             consecutive_rollbacks,
                             message_history,
+                            arguments,
                         ) = await self._check_duplicate_query(
                             tool_name,
                             arguments,
@@ -989,6 +1080,7 @@ class Orchestrator:
                             turn_count,
                             consecutive_rollbacks,
                             message_history,
+                            arguments,
                         ) = await self._check_duplicate_query(
                             tool_name,
                             arguments,
@@ -1007,14 +1099,35 @@ class Orchestrator:
                         # Send stream event
                         tool_call_id = await self.stream.tool_call(tool_name, arguments)
 
-                        # Execute tool call
-                        tool_result = (
-                            await self.main_agent_tool_manager.execute_tool_call(
-                                server_name=server_name,
-                                tool_name=tool_name,
-                                arguments=arguments,
+                        # Pre-search memory recall before external retrieval
+                        memory_tool_result = None
+                        if self.memory_manager and self.memory_manager.enabled:
+                            memory_tool_result = (
+                                await self.memory_manager.maybe_short_circuit_search(
+                                    tool_name=tool_name,
+                                    arguments=arguments,
+                                )
                             )
-                        )
+                        if memory_tool_result is not None:
+                            tool_result = {
+                                "server_name": server_name,
+                                "tool_name": tool_name,
+                                **memory_tool_result,
+                            }
+                            self.task_log.log_step(
+                                "info",
+                                f"Main Agent | Turn: {turn_count} | Memory Recall",
+                                f"Short-circuited external search using memory for tool: {tool_name}",
+                            )
+                        else:
+                            # Execute external tool call
+                            tool_result = (
+                                await self.main_agent_tool_manager.execute_tool_call(
+                                    server_name=server_name,
+                                    tool_name=tool_name,
+                                    arguments=arguments,
+                                )
+                            )
 
                         # Update query count if successful
                         if "error" not in tool_result:
@@ -1180,6 +1293,14 @@ class Orchestrator:
                 "Main Agent | Search Data",
                 f"Collected {len(search_data)} search-related tool calls",
             )
+            if self.memory_manager and self.memory_manager.enabled:
+                await self.memory_manager.persist_task_memory(
+                    task_id=task_id,
+                    task_description=task_description,
+                    task_file_name=task_file_name,
+                    final_summary=json.dumps(search_data, ensure_ascii=False),
+                    final_boxed_answer="",
+                )
             await self.stream.end_workflow(workflow_id)
             return json.dumps(search_data, ensure_ascii=False), "", None
 
@@ -1243,5 +1364,13 @@ class Orchestrator:
             "Main Agent | Task Completed",
             f"Main agent task {task_id} completed successfully",
         )
+        if self.memory_manager and self.memory_manager.enabled:
+            await self.memory_manager.persist_task_memory(
+                task_id=task_id,
+                task_description=task_description,
+                task_file_name=task_file_name,
+                final_summary=final_summary,
+                final_boxed_answer=final_boxed_answer,
+            )
         gc.collect()
         return final_summary, final_boxed_answer, failure_experience_summary

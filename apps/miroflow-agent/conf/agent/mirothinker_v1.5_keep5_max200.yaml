@@ -20,4 +20,4 @@ sub_agents:
 # Settings for context management
 keep_tool_result: 5
 context_compress_limit: 5  # Enable context compression (>0 = enabled, 0 = disabled).
-output_mode: search_data  # report | search_data
+output_mode: report  # report | search_data

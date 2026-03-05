@@ -31,6 +31,23 @@ uv run python main.py llm=claude-3-7 agent=single_agent_keep5
 uv run python main.py llm=gpt-5 agent=single_agent_keep5
 ```
 
+### Run Mirosearch Service
+
+`Mirosearch` is the semantic memory service wrapper used by the memory module.
+
+```bash
+uv run python mirosearch_server.py
+# health check: GET http://127.0.0.1:8765/health
+```
+
+For real `memsearch` backend on Windows, set a remote Milvus endpoint:
+
+```bash
+set MILVUS_URI=http://<milvus-host>:19530
+set MILVUS_TOKEN=<optional-token>
+uv run python mirosearch_server.py
+```
+
 ### Customize Your Task
 
 To ask a different question, edit `main.py` line 32:
@@ -40,18 +57,6 @@ task_description = "Your custom question here"
 ```
 
 Then run the agent again. It will search the web, execute code, and provide an answer.
-
-### Run Benchmark Evaluation
-
-For systematic evaluation on standard benchmarks, add the `benchmark=` parameter:
-
-```bash
-# Run on debug benchmark (quick test)
-uv run python main.py llm=qwen-3 agent=mirothinker_v1.5_keep5_max200 benchmark=debug llm.base_url=http://localhost:61002/v1
-
-# Run on specific benchmarks
-uv run python main.py llm=qwen-3 agent=mirothinker_v1.5_keep5_max200 benchmark=gaia-validation-text-103 llm.base_url=http://localhost:61002/v1
-```
 
 ## Available Configurations
 
@@ -85,10 +90,6 @@ uv run python main.py llm=qwen-3 agent=mirothinker_v1.5_keep5_max200 benchmark=g
 
 - `multi_agent` - multi-agent with commercial tools
 - `multi_agent_os` - multi-agent with open-source tools
-
-### Benchmark Configs
-
-`debug`, `browsecomp`, `browsecomp_zh`, `hle`, `hle-text-2158`, `hle-text-500`, `gaia-validation-text-103`, `gaia-validation`, `frames`, `xbench_deepsearch`, `futurex`, `seal-0`, `aime2025`, `deepsearchqa`, `webwalkerqa`
 
 ## Output
 

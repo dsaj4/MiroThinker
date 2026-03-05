@@ -21,6 +21,99 @@ from json_repair import repair_json
 logger = logging.getLogger("miroflow_agent")
 
 
+def _strip_code_fence(text: str) -> str:
+    """Strip optional markdown code fences around content."""
+    if not text:
+        return text
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove the first fence line and trailing fence if present.
+        lines = stripped.splitlines()
+        if len(lines) >= 2:
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            return "\n".join(lines).strip()
+    return stripped
+
+
+def _extract_relaxed_tag(block: str, tag_name: str) -> str:
+    """
+    Extract tag content with tolerance for malformed forms.
+
+    Supported examples:
+    - <server_name>foo</server_name>
+    - <server_name=foo</server_name>
+    - <server_name = foo</server_name>
+    """
+    # Strict well-formed tag first
+    strict_pattern = rf"<{tag_name}>\s*([\s\S]*?)\s*</{tag_name}>"
+    strict_match = re.search(strict_pattern, block, flags=re.IGNORECASE)
+    if strict_match:
+        return strict_match.group(1).strip()
+
+    # Relaxed malformed tag, e.g. <server_name=foo</server_name>
+    relaxed_pattern = rf"<{tag_name}\s*=\s*([\s\S]*?)\s*</{tag_name}>"
+    relaxed_match = re.search(relaxed_pattern, block, flags=re.IGNORECASE)
+    if relaxed_match:
+        return relaxed_match.group(1).strip()
+
+    return ""
+
+
+def _parse_mcp_tool_calls_relaxed(content: str) -> List[Dict[str, Any]]:
+    """
+    Parse MCP tool calls with tolerant matching for common malformed tags.
+
+    This parser is used as a fallback when strict parsing yields no result.
+    """
+    tool_calls: List[Dict[str, Any]] = []
+
+    blocks = re.findall(
+        r"<use_mcp_tool>\s*([\s\S]*?)\s*</use_mcp_tool>",
+        content,
+        flags=re.IGNORECASE,
+    )
+
+    # If the closing tag is missing, salvage from the first opening tag.
+    if not blocks and re.search(r"<use_mcp_tool>", content, flags=re.IGNORECASE):
+        start = re.search(r"<use_mcp_tool>", content, flags=re.IGNORECASE)
+        if start:
+            blocks = [content[start.end() :]]
+
+    for block in blocks:
+        server_name = _extract_relaxed_tag(block, "server_name")
+        tool_name = _extract_relaxed_tag(block, "tool_name")
+
+        args_match = re.search(
+            r"<arguments>\s*([\s\S]*?)\s*</arguments>",
+            block,
+            flags=re.IGNORECASE,
+        )
+        if args_match:
+            arguments_str = args_match.group(1).strip()
+        else:
+            # Salvage from unclosed arguments block
+            args_open = re.search(r"<arguments>\s*([\s\S]*)", block, flags=re.IGNORECASE)
+            arguments_str = args_open.group(1).strip() if args_open else "{}"
+
+        arguments_str = _strip_code_fence(arguments_str)
+        arguments = safe_json_loads(arguments_str)
+        arguments = filter_none_values(arguments)
+
+        if server_name and tool_name:
+            tool_calls.append(
+                {
+                    "server_name": server_name,
+                    "tool_name": tool_name,
+                    "arguments": arguments,
+                    "id": None,
+                }
+            )
+
+    return tool_calls
+
+
 def filter_none_values(arguments: Union[Dict, Any]) -> Union[Dict, Any]:
     """
     Filter out keys with None values from arguments dictionary.
@@ -305,22 +398,19 @@ def parse_llm_response_for_tool_calls(
 
     # for other clients, such as qwen and anthropic, we use MCP instead of tool calls
     tool_calls = []
-    # Find all <use_mcp_tool> tags
+    # Strict parser first
     tool_call_patterns = re.findall(
         r"<use_mcp_tool>\s*<server_name>(.*?)</server_name>\s*<tool_name>(.*?)</tool_name>\s*<arguments>\s*([\s\S]*?)\s*</arguments>\s*</use_mcp_tool>",
         llm_response_content_text,
-        re.DOTALL,
+        re.DOTALL | re.IGNORECASE,
     )
 
     for match in tool_call_patterns:
         server_name = match[0].strip()
         tool_name = match[1].strip()
-        arguments_str = match[2].strip()
-
-        # Parse JSON string to dictionary
+        arguments_str = _strip_code_fence(match[2].strip())
         arguments = safe_json_loads(arguments_str)
         arguments = filter_none_values(arguments)
-
         tool_calls.append(
             {
                 "server_name": server_name,
@@ -329,5 +419,9 @@ def parse_llm_response_for_tool_calls(
                 "id": None,
             }
         )
+
+    # Fallback tolerant parser for minor format drift
+    if not tool_calls and isinstance(llm_response_content_text, str):
+        return _parse_mcp_tool_calls_relaxed(llm_response_content_text)
 
     return tool_calls

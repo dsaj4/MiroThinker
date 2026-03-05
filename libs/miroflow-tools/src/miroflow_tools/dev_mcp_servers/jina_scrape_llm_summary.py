@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -17,11 +18,79 @@ SUMMARY_LLM_BASE_URL = os.environ.get("SUMMARY_LLM_BASE_URL")
 SUMMARY_LLM_MODEL_NAME = os.environ.get("SUMMARY_LLM_MODEL_NAME")
 SUMMARY_LLM_API_KEY = os.environ.get("SUMMARY_LLM_API_KEY")
 
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+DASHSCOPE_BASE_URL = os.environ.get("DASHSCOPE_BASE_URL")
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
+
 JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
 JINA_BASE_URL = os.environ.get("JINA_BASE_URL", "https://r.jina.ai")
 
 # Initialize FastMCP server
 mcp = FastMCP("jina_scrape_llm_summary")
+
+
+def _is_placeholder(value: str) -> bool:
+    """Detect unset/placeholder values commonly seen in .env examples."""
+    if value is None:
+        return True
+    v = value.strip().lower()
+    if not v:
+        return True
+    if v in {"none", "null", "nil"}:
+        return True
+    if v.startswith("your_") or "your_" in v:
+        return True
+    return False
+
+
+def _build_chat_completions_url(base_url: str) -> str:
+    """Normalize a base URL into a concrete chat completions endpoint."""
+    raw = (base_url or "").strip().strip('"').strip("'")
+    if _is_placeholder(raw):
+        return ""
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    normalized = raw.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return normalized + "/chat/completions"
+    return normalized + "/v1/chat/completions"
+
+
+def _resolve_summary_llm_config(default_model: str) -> tuple[str, str, str]:
+    """
+    Resolve robust LLM config for summary extraction with fallback order:
+    1) SUMMARY_LLM_* env
+    2) OPENAI_* env
+    3) DASHSCOPE_* env
+    """
+    # Resolve model
+    model = default_model
+    if _is_placeholder(model):
+        if not _is_placeholder(os.environ.get("JUDGE_MODEL_NAME")):
+            model = os.environ.get("JUDGE_MODEL_NAME")
+        elif not _is_placeholder(os.environ.get("JUDGE_MODEL_NAME_SIMPLEQA")):
+            model = os.environ.get("JUDGE_MODEL_NAME_SIMPLEQA")
+        else:
+            model = "qwen3-max"
+
+    # Resolve base url
+    chat_url = _build_chat_completions_url(SUMMARY_LLM_BASE_URL or "")
+    api_key = SUMMARY_LLM_API_KEY or ""
+
+    if not chat_url:
+        chat_url = _build_chat_completions_url(OPENAI_BASE_URL or "")
+        api_key = api_key or (OPENAI_API_KEY or "")
+
+    if not chat_url:
+        chat_url = _build_chat_completions_url(DASHSCOPE_BASE_URL or "")
+        api_key = api_key or (DASHSCOPE_API_KEY or "")
+
+    return model, chat_url, api_key
 
 
 @mcp.tool()
@@ -622,22 +691,34 @@ async def extract_info_with_llm(
 
     prompt = get_prompt_with_truncation(info_to_extract, content)
 
+    resolved_model, resolved_chat_url, resolved_api_key = _resolve_summary_llm_config(
+        default_model=model
+    )
+    if resolved_model != model:
+        logger.info(
+            f"Extract Info: summary model fallback from '{model}' to '{resolved_model}'"
+        )
+    if not SUMMARY_LLM_BASE_URL or _is_placeholder(SUMMARY_LLM_BASE_URL):
+        logger.info(
+            "Extract Info: SUMMARY_LLM_BASE_URL missing/placeholder, using fallback endpoint configuration."
+        )
+
     # Prepare the payload
-    if "gpt" in model:
+    if "gpt" in resolved_model.lower():
         payload = {
-            "model": model,
+            "model": resolved_model,
             "max_completion_tokens": max_tokens,
             "messages": [
                 {"role": "user", "content": prompt},
             ],
         }
         # Add cost-saving parameters for GPT-5 models
-        if "gpt-5" in model.lower() or "gpt5" in model.lower():
+        if "gpt-5" in resolved_model.lower() or "gpt5" in resolved_model.lower():
             payload["service_tier"] = "flex"
             payload["reasoning_effort"] = "minimal"
     else:
         payload = {
-            "model": model,
+            "model": resolved_model,
             "max_tokens": max_tokens,
             "messages": [
                 {"role": "user", "content": prompt},
@@ -648,19 +729,19 @@ async def extract_info_with_llm(
         }
 
     # Validate LLM endpoint configuration early for clearer errors
-    if not SUMMARY_LLM_BASE_URL or not SUMMARY_LLM_BASE_URL.strip():
+    if not resolved_chat_url:
         return {
             "success": False,
             "extracted_info": "",
-            "error": "SUMMARY_LLM_BASE_URL environment variable is not set",
-            "model_used": model,
+            "error": "No valid summary LLM endpoint found. Set SUMMARY_LLM_BASE_URL or OPENAI_BASE_URL/DASHSCOPE_BASE_URL.",
+            "model_used": resolved_model,
             "tokens_used": 0,
         }
 
     # Prepare headers (add Authorization if API key is available)
     headers = {"Content-Type": "application/json"}
-    if SUMMARY_LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {SUMMARY_LLM_API_KEY}"
+    if resolved_api_key and not _is_placeholder(resolved_api_key):
+        headers["Authorization"] = f"Bearer {resolved_api_key}"
 
     try:
         # Retry configuration
@@ -671,7 +752,7 @@ async def extract_info_with_llm(
                 # Make the API request using httpx
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
-                        SUMMARY_LLM_BASE_URL,
+                        resolved_chat_url,
                         headers=headers,
                         json=payload,
                         timeout=httpx.Timeout(None, connect=30, read=300),
@@ -746,7 +827,8 @@ async def extract_info_with_llm(
 
                 # Special case: GPT-5 service_tier parameter compatibility issue
                 if (
-                    "gpt-5" in model.lower() or "gpt5" in model.lower()
+                    "gpt-5" in resolved_model.lower()
+                    or "gpt5" in resolved_model.lower()
                 ) and "service_tier" in payload:
                     logger.info(
                         "Extract Info: GPT-5 service_tier error, removing and retrying"
@@ -789,7 +871,7 @@ async def extract_info_with_llm(
             "success": False,
             "extracted_info": "",
             "error": error_msg,
-            "model_used": model,
+            "model_used": resolved_model,
             "tokens_used": 0,
         }
 
@@ -807,7 +889,7 @@ async def extract_info_with_llm(
             "success": False,
             "extracted_info": "",
             "error": error_msg,
-            "model_used": model,
+            "model_used": resolved_model,
             "tokens_used": 0,
         }
 
@@ -822,7 +904,7 @@ async def extract_info_with_llm(
                 "success": False,
                 "extracted_info": "",
                 "error": error_msg,
-                "model_used": model,
+                "model_used": resolved_model,
                 "tokens_used": 0,
             }
 
@@ -835,7 +917,7 @@ async def extract_info_with_llm(
             "success": True,
             "extracted_info": summary,
             "error": "",
-            "model_used": model,
+            "model_used": resolved_model,
             "tokens_used": tokens_used,
         }
     elif "error" in response_data:
@@ -847,7 +929,7 @@ async def extract_info_with_llm(
             "success": False,
             "extracted_info": "",
             "error": error_msg,
-            "model_used": model,
+            "model_used": resolved_model,
             "tokens_used": 0,
         }
     else:
@@ -857,7 +939,7 @@ async def extract_info_with_llm(
             "success": False,
             "extracted_info": "",
             "error": error_msg,
-            "model_used": model,
+            "model_used": resolved_model,
             "tokens_used": 0,
         }
 

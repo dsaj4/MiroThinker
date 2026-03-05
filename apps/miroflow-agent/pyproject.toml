@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "miroflow-tools>=0.1.0",
+    "memsearch>=0.1.13",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "huggingface-hub>=0.28.0",
@@ -60,6 +61,7 @@ packages = ["src"]
 
 [tool.uv.sources]
 miroflow-tools = { path = "../../libs/miroflow-tools", editable = true }
+memsearch = { path = "../../memsearch-main", editable = true }
 
 [dependency-groups]
 dev = [
@@ -93,6 +95,6 @@ addopts = [
     # use `pytest-testmon` to run tests on changed files only
     # "--testmon",
     # use `pytest-cov` to generate test coverage report
-    "--cov=miroflow_agent",
+    "--cov=src",
     "--cov-report=html",
 ]

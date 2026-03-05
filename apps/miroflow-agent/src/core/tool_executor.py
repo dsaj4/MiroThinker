@@ -125,6 +125,38 @@ class ToolExecutor:
             )
         return None
 
+    @staticmethod
+    def diversify_duplicate_query(
+        tool_name: str, arguments: dict, attempt_index: int
+    ) -> dict:
+        """
+        Diversify duplicate search-like queries to reduce rollback loops.
+
+        This keeps semantic intent while making a concrete query variation so the
+        next call can progress instead of being repeatedly rolled back.
+        """
+        if attempt_index > 3:
+            return arguments
+
+        diversified = arguments.copy()
+        suffix = f" [refined attempt {attempt_index}]"
+
+        if tool_name == "google_search" and diversified.get("q"):
+            diversified["q"] = str(diversified["q"]) + suffix
+        elif tool_name == "sogou_search" and diversified.get("Query"):
+            diversified["Query"] = str(diversified["Query"]) + suffix
+        elif tool_name == "search_and_browse" and diversified.get("subtask"):
+            diversified["subtask"] = str(diversified["subtask"]) + suffix
+        elif tool_name == "scrape_and_extract_info" and diversified.get(
+            "info_to_extract"
+        ):
+            diversified["info_to_extract"] = (
+                str(diversified["info_to_extract"])
+                + f" (require an additional corroborating detail{suffix})"
+            )
+
+        return diversified
+
     def is_duplicate_query(self, cache_name: str, query_str: str) -> Tuple[bool, int]:
         """
         Check if a query has been executed before.
