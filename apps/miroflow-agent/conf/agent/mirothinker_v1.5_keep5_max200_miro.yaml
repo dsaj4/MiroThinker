@@ -1,0 +1,11 @@
+# conf/agent/mirothinker_v1.5_keep5_max200_miro.yaml
+# Same as mirothinker_v1.5_keep5_max200 but with miro output mode enabled.
+defaults:
+  - mirothinker_v1.5_keep5_max200
+  - _self_
+
+# Output style:
+# - report: legacy final answer + extracted result
+# - search_data: raw search tool-call trace
+# - miro: answer + evidence + confidence
+output_mode: miro

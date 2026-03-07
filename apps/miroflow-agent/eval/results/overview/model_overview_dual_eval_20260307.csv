@@ -1,0 +1,5 @@
+﻿"model","cases_quality","relevance_avg","information_density_avg","model_alignment_avg","cases_hitrate","hit_score_avg","full_hit_rate_pct","partial_hit_rate_pct","miss_rate_pct"
+"kimi","20","6.2","7.15","5.5","20","2.95","10","15","75"
+"minimax","20","6.3","5.65","3.75","20","3.2","0","25","70"
+"glm","20","7.75","6.95","5.3","20","4.5","0","45","50"
+"mirosearch","20","6.8","5.6","4.1","20","4.35","20","25","55"
