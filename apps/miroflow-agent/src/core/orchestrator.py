@@ -1,4 +1,4 @@
-# Copyright (c) 2025 MiroMind
+﻿# Copyright (c) 2025 MiroMind
 # This source code is licensed under the MIT License.
 
 """
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Default timeout for LLM calls in seconds
-DEFAULT_LLM_TIMEOUT = 600
+DEFAULT_LLM_TIMEOUT = 60
 
 # Safety limits for retry loops
 DEFAULT_MAX_CONSECUTIVE_ROLLBACKS = 5
@@ -1251,6 +1251,7 @@ class Orchestrator:
             temp_summary_prompt = generate_agent_summarize_prompt(
                 task_description,
                 agent_type="main",
+                output_mode=self.cfg.agent.get("output_mode", "report"),
             )
 
             pass_length_check, message_history = self.llm_client.ensure_summary_context(

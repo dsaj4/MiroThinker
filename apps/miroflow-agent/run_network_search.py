@@ -46,7 +46,12 @@ async def amain(cfg: DictConfig) -> None:
         logger.error(f"Missing dataset {data_file}")
         return
 
-    out_file = Path(cfg.debug_dir) / "network_search_results.jsonl"
+    app_root = Path(__file__).resolve().parent
+    debug_dir = Path(cfg.debug_dir)
+    if not debug_dir.is_absolute():
+        debug_dir = (app_root / debug_dir).resolve()
+
+    out_file = debug_dir / "network_search_results.jsonl"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     
     with open(data_file, "r", encoding="utf-8") as f:
@@ -73,7 +78,7 @@ async def amain(cfg: DictConfig) -> None:
                     main_agent_tool_manager=main_agent_tool_manager,
                     sub_agent_tool_managers=sub_agent_tool_managers,
                     output_formatter=output_formatter,
-                    log_dir=cfg.debug_dir,
+                    log_dir=str(debug_dir),
                 )
                 
                 output_item = {

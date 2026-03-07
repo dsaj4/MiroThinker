@@ -23,6 +23,13 @@
 ## 4) Config and Tests
 - `conf/`: Hydra configs (`llm/`, `agent/`).
 - `tests/`: pytest unit tests.
+- `eval/`: published evaluation workspace:
+  - `materials/`: dataset, questions, ground truth, prompts, cleaned answer sets
+  - `results/quality_judge/`: relevance-density-alignment scoring outputs
+  - `results/hitrate_judge/`: ground-truth hit-rate scoring outputs
+  - `results/overview/`: cross-model summary tables
+  - `docs/`: evaluation methodology and process docs
+  - `archive/legacy_outputs/`: historical temporary outputs kept for traceability
 
 ## 5) Persistent Data Boundary
 - Keep:

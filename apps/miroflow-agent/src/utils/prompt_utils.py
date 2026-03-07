@@ -1,4 +1,4 @@
-# Copyright (c) 2025 MiroMind
+﻿# Copyright (c) 2025 MiroMind
 # This source code is licensed under the MIT License.
 
 """
@@ -77,7 +77,7 @@ mcp_tags = [
 
 refusal_keywords = [
     "time constraint",
-    "I’m sorry, but I can’t",
+    "I鈥檓 sorry, but I can鈥檛",
     "I'm sorry, I cannot solve",
 ]
 
@@ -233,46 +233,76 @@ Do not infer, speculate, summarize broadly, or attempt to fill in missing parts 
     return system_prompt.strip()
 
 
-def generate_agent_summarize_prompt(task_description, agent_type=""):
+def generate_agent_summarize_prompt(
+    task_description, agent_type="", output_mode: str = "report"
+):
     """
     Generate the final summarization prompt for an agent.
 
     Creates prompts that instruct agents to summarize their work and provide
-    final answers. Different agent types have different summarization formats:
-    - main: Must wrap answer in \\boxed{} with strict formatting rules
-    - agent-browsing: Provides structured report of findings
+    final answers. Different agent types have different summarization formats.
 
     Args:
         task_description: The original task/question to reference in the summary
         agent_type: Type of agent ("main" or "agent-browsing")
+        output_mode: Output mode ("report", "search_data", "miro")
 
     Returns:
         Summarization prompt string with formatting instructions
     """
     if agent_type == "main":
-        summarize_prompt = (
-            "Summarize the above conversation, and output the FINAL ANSWER to the original question.\n\n"
-            "If a clear answer has already been provided earlier in the conversation, do not rethink or recalculate it — "
-            "simply extract that answer and reformat it to match the required format below.\n"
-            "If a definitive answer could not be determined, make a well-informed educated guess based on the conversation.\n\n"
-            "The original question is repeated here for reference:\n\n"
-            f'"{task_description}"\n\n'
-            "Wrap your final answer in \\boxed{}.\n"
-            "Your final answer should be:\n"
-            "- a number, OR\n"
-            "- as few words as possible, OR\n"
-            "- a comma-separated list of numbers and/or strings.\n\n"
-            "ADDITIONALLY, your final answer MUST strictly follow any formatting instructions in the original question — "
-            "such as alphabetization, sequencing, units, rounding, decimal places, etc.\n"
-            "If you are asked for a number, express it numerically (i.e., with digits rather than words), don't use commas, and DO NOT INCLUDE UNITS such as $ or USD or percent signs unless specified otherwise.\n"
-            "If you are asked for a string, don't use articles or abbreviations (e.g. for cities), unless specified otherwise. Don't output any final sentence punctuation such as '.', '!', or '?'.\n"
-            "If you are asked for a comma-separated list, apply the above rules depending on whether the elements are numbers or strings.\n"
-            "Do NOT include any punctuation such as '.', '!', or '?' at the end of the answer.\n"
-            "Do NOT include any invisible or non-printable characters in the answer output.\n\n"
-            "You must absolutely not perform any MCP tool call, tool invocation, search, scrape, code execution, or similar actions.\n"
-            "You can only answer the original question based on the information already retrieved and your own internal knowledge.\n"
-            "If you attempt to call any tool, it will be considered a mistake."
-        )
+        if output_mode == "miro":
+            summarize_prompt = (
+                "Summarize the above conversation and output FINAL RESULT as a single JSON object.\n\n"
+                "The original question is repeated here for reference:\n\n"
+                f'"{task_description}"\n\n'
+                "Output schema:\n"
+                "{\n"
+                '  "answer": "short direct answer",\n'
+                '  "evidence": [\n'
+                "    {\n"
+                '      "title": "source title",\n'
+                '      "url": "https://...",\n'
+                '      "snippet": "short supporting finding"\n'
+                "    }\n"
+                "  ],\n"
+                '  "confidence": {\n'
+                '    "score": 0-100,\n'
+                '    "level": "high|medium|low",\n'
+                '    "reason": "brief reason"\n'
+                "  }\n"
+                "}\n\n"
+                "Rules:\n"
+                "- Do NOT call tools.\n"
+                "- Do NOT output markdown or code fences.\n"
+                "- Evidence URLs must come from already retrieved sources in conversation.\n"
+                "- Keep answer concise and follow original format constraints.\n"
+                "- If evidence is weak, lower confidence."
+            )
+        else:
+            summarize_prompt = (
+                "Summarize the above conversation, and output the FINAL ANSWER to the original question.\n\n"
+                "If a clear answer has already been provided earlier in the conversation, do not rethink or recalculate it - "
+                "simply extract that answer and reformat it to match the required format below.\n"
+                "If a definitive answer could not be determined, make a well-informed educated guess based on the conversation.\n\n"
+                "The original question is repeated here for reference:\n\n"
+                f'"{task_description}"\n\n'
+                "Wrap your final answer in \\boxed{}.\n"
+                "Your final answer should be:\n"
+                "- a number, OR\n"
+                "- as few words as possible, OR\n"
+                "- a comma-separated list of numbers and/or strings.\n\n"
+                "ADDITIONALLY, your final answer MUST strictly follow any formatting instructions in the original question - "
+                "such as alphabetization, sequencing, units, rounding, decimal places, etc.\n"
+                "If you are asked for a number, express it numerically (i.e., with digits rather than words), don't use commas, and DO NOT INCLUDE UNITS such as $ or USD or percent signs unless specified otherwise.\n"
+                "If you are asked for a string, don't use articles or abbreviations (e.g. for cities), unless specified otherwise. Don't output any final sentence punctuation such as '.', '!', or '?'.\n"
+                "If you are asked for a comma-separated list, apply the above rules depending on whether the elements are numbers or strings.\n"
+                "Do NOT include any punctuation such as '.', '!', or '?' at the end of the answer.\n"
+                "Do NOT include any invisible or non-printable characters in the answer output.\n\n"
+                "You must absolutely not perform any MCP tool call, tool invocation, search, scrape, code execution, or similar actions.\n"
+                "You can only answer the original question based on the information already retrieved and your own internal knowledge.\n"
+                "If you attempt to call any tool, it will be considered a mistake."
+            )
     elif agent_type == "agent-browsing":
         summarize_prompt = (
             "This is a direct instruction to you (the assistant), not the result of a tool call.\n\n"
@@ -296,3 +326,4 @@ def generate_agent_summarize_prompt(task_description, agent_type=""):
         raise ValueError(f"Unknown agent type: {agent_type}")
 
     return summarize_prompt.strip()
+

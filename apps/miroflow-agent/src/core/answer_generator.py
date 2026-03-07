@@ -274,9 +274,11 @@ class AnswerGenerator:
             Tuple of (final_answer_text, final_summary, final_boxed_answer, usage_log, message_history)
         """
         # Generate summary prompt
+        output_mode = self.cfg.agent.get("output_mode", "report")
         summary_prompt = generate_agent_summarize_prompt(
             task_description,
             agent_type="main",
+            output_mode=output_mode,
         )
 
         if message_history[-1]["role"] == "user":
@@ -304,13 +306,24 @@ class AnswerGenerator:
             )
 
             if final_answer_text:
-                final_summary, final_boxed_answer, usage_log = (
-                    self.output_formatter.format_final_summary_and_log(
-                        final_answer_text, self.llm_client
+                if output_mode == "miro":
+                    tool_calls = self.task_log.trace_data.get("tool_calls", [])
+                    final_summary, final_boxed_answer, usage_log = (
+                        self.output_formatter.format_miro_summary_and_log(
+                            final_answer_text=final_answer_text,
+                            tool_calls=tool_calls,
+                            client=self.llm_client,
+                        )
                     )
-                )
+                else:
+                    final_summary, final_boxed_answer, usage_log = (
+                        self.output_formatter.format_final_summary_and_log(
+                            final_answer_text, self.llm_client
+                        )
+                    )
 
-                if final_boxed_answer != FORMAT_ERROR_MESSAGE:
+                valid_final = output_mode == "miro" or final_boxed_answer != FORMAT_ERROR_MESSAGE
+                if valid_final:
                     self.task_log.log_step(
                         "info",
                         "Main Agent | Final Answer",

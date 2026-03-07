@@ -1,4 +1,4 @@
-# Copyright (c) 2025 MiroMind
+﻿# Copyright (c) 2025 MiroMind
 # This source code is licensed under the MIT License.
 
 """
@@ -26,7 +26,7 @@ from ..logging.task_logger import TaskLog
 from .util import with_timeout
 
 # Default timeout for LLM API calls (10 minutes)
-DEFAULT_LLM_TIMEOUT_SECONDS = 600
+DEFAULT_LLM_TIMEOUT_SECONDS = 60
 
 
 class TokenUsage(TypedDict, total=True):

@@ -15,6 +15,7 @@ and the orchestrator to execute complex multi-turn agent tasks.
 import time
 import traceback
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from miroflow_tools.manager import ToolManager
@@ -75,9 +76,15 @@ async def execute_task_pipeline(
     # Measure end-to-end execution time
     start_perf = time.perf_counter()
 
+    # Normalize log directory to project scope so logs are not affected by process cwd.
+    app_root = Path(__file__).resolve().parents[2]  # apps/miroflow-agent
+    normalized_log_dir = Path(log_dir)
+    if not normalized_log_dir.is_absolute():
+        normalized_log_dir = (app_root / normalized_log_dir).resolve()
+
     # Create task log
     task_log = TaskLog(
-        log_dir=log_dir,
+        log_dir=str(normalized_log_dir),
         task_id=task_id,
         start_time=get_utc_plus_8_time(),
         input={"task_description": task_description, "task_file_name": task_file_name},

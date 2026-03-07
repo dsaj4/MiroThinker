@@ -1,4 +1,4 @@
-# conf/agent/default.yaml
+﻿# conf/agent/default.yaml
 # The name of tools and sub-agents defined in: apps/miroflow-agent/src/config/settings.py
 # Each sub-agent prompt is written in: apps/miroflow-agent/src/utils/prompt_utils.py
 main_agent:
@@ -22,4 +22,5 @@ sub_agents:
 # Settings for context management
 keep_tool_result: -1
 context_compress_limit: 0  # Enable context compression (>0 = enabled, 0 = disabled).
-output_mode: search_data  # report | search_data
+output_mode: search_data  # report | search_data | miro
+
