@@ -48,6 +48,7 @@ async def execute_task_pipeline(
     stream_queue: Optional[Any] = None,
     tool_definitions: Optional[List[Dict[str, Any]]] = None,
     sub_agent_tool_definitions: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    is_final_retry: bool = False,
 ):
     """
     Executes the full pipeline for a single task.
@@ -137,6 +138,7 @@ async def execute_task_pipeline(
             task_description=task_description,
             task_file_name=task_file_name,
             task_id=task_id,
+            is_final_retry=is_final_retry,
         )
 
         task_log.final_boxed_answer = final_boxed_answer
