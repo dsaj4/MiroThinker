@@ -1,0 +1,16 @@
+[Unit]
+Description=MiroSearch API
+After=network.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__UV_BIN__ run uvicorn api_server:app --host 0.0.0.0 --port 18080 --workers 1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
