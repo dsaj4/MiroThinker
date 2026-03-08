@@ -124,3 +124,21 @@ uv run python mirosearch_server.py
 
 - 评测说明：[`eval/docs/EVALUATION_GUIDE.md`](./eval/docs/EVALUATION_GUIDE.md)
 - 四模型双标准总览：[`eval/results/overview/model_overview_dual_eval_20260307.csv`](./eval/results/overview/model_overview_dual_eval_20260307.csv)
+
+### 5) 对外 API 服务
+
+主流程已经封装为 FastAPI 服务，入口文件：`api_server.py`
+
+启动方式：
+
+```bash
+uv run python api_server.py
+```
+
+接口说明见：[`API_SERVICE.md`](./API_SERVICE.md)
+Linux 部署说明见：[`DEPLOY_LINUX.md`](./DEPLOY_LINUX.md)
+
+说明：
+- API 默认启用 `api_friendly` 模式，适合外部系统接入。
+- 该模式会放宽简单任务的最终输出格式约束，降低因格式问题导致的误判失败。
+- `POST /v1/search` 提供精简接口，默认走 `miro` 结构化结果，适合服务间调用。

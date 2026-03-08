@@ -2,6 +2,7 @@
 # This source code is licensed under the MIT License.
 
 import asyncio
+import os
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -16,6 +17,8 @@ from src.logging.task_logger import bootstrap_logger
 # Configure logger and get the configured instance
 logger = bootstrap_logger()
 
+DEFAULT_TASK = "Summarize the most important facts you can verify for the given topic."
+
 
 async def amain(cfg: DictConfig) -> None:
     """Asynchronous main function."""
@@ -27,13 +30,14 @@ async def amain(cfg: DictConfig) -> None:
         create_pipeline_components(cfg)
     )
 
-    # Define task parameters
-    task_id = "task_example"
-    task_description = "What is the title of today's arxiv paper in computer science?"
-    task_file_name = ""
+    task_id = cfg.get("task_id", "task_example")
+    task_description = cfg.get("task_description") or os.getenv(
+        "MIROSEARCH_TASK", DEFAULT_TASK
+    )
+    task_file_name = cfg.get("task_file_name", "")
 
     # Execute task using the pipeline
-    final_summary, final_boxed_answer, log_file_path, _ = await execute_task_pipeline(
+    await execute_task_pipeline(
         cfg=cfg,
         task_id=task_id,
         task_file_name=task_file_name,

@@ -23,4 +23,5 @@ sub_agents:
 keep_tool_result: -1
 context_compress_limit: 0  # Enable context compression (>0 = enabled, 0 = disabled).
 output_mode: search_data  # report | search_data | miro
+api_friendly: false
 

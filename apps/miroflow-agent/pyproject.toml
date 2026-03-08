@@ -89,12 +89,4 @@ addopts = [
     "--show-capture=stderr",
     # use `pytest-xdist` to run tests in parallel
     "-n=auto",
-    # use `pytest-html` to generate test report in html format
-    "--html=report.html",
-    "--self-contained-html",
-    # use `pytest-testmon` to run tests on changed files only
-    # "--testmon",
-    # use `pytest-cov` to generate test coverage report
-    "--cov=src",
-    "--cov-report=html",
 ]

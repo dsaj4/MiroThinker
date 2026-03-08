@@ -9,12 +9,41 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..utils.prompt_utils import FORMAT_ERROR_MESSAGE
 
-# Maximum length for tool results before truncation (100k chars ≈ 25k tokens)
+# Maximum length for tool results before truncation (~100k chars / ~25k tokens)
 TOOL_RESULT_MAX_LENGTH = 100_000
 
 
 class OutputFormatter:
     """Formatter for processing and formatting agent outputs."""
+
+    @staticmethod
+    def _strip_think_blocks(text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
+        return text.strip()
+
+    def _extract_plain_answer_fallback(self, text: str) -> str:
+        text = self._strip_think_blocks(text)
+        if not text:
+            return ""
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return ""
+
+        # Prefer the last concise line, which is usually the direct answer in simple tasks.
+        for line in reversed(lines):
+            cleaned = re.sub(r"^(?:[-*]|\d+[.)\]])\s+", "", line).strip()
+            if not cleaned:
+                continue
+            if cleaned.startswith("\\boxed"):
+                continue
+            if len(cleaned) <= 200:
+                return cleaned
+
+        compact = " ".join(lines).strip()
+        return compact[:200] if compact else ""
 
     def _extract_boxed_content(self, text: str) -> str:
         r"""
@@ -90,7 +119,7 @@ class OutputFormatter:
                 i = j + 1  # Move past this invalid boxed
 
         # Return the last boxed content found (complete or incomplete)
-        black_list = ["?", "??", "???", "？", "……", "…", "...", "unknown", None]
+        black_list = {"?", "??", "???", "...", "unknown", None}
         return last_result.strip() if last_result not in black_list else ""
 
     def format_tool_result_for_user(self, tool_call_execution_result: dict) -> dict:
@@ -150,8 +179,13 @@ class OutputFormatter:
         if boxed_result:
             summary_lines.append(boxed_result)
         elif final_answer_text:
-            summary_lines.append("No \\boxed{} content found.")
-            boxed_result = FORMAT_ERROR_MESSAGE
+            fallback_result = self._extract_plain_answer_fallback(final_answer_text)
+            if fallback_result:
+                summary_lines.append(fallback_result)
+                boxed_result = fallback_result
+            else:
+                summary_lines.append("No \\boxed{} content found.")
+                boxed_result = FORMAT_ERROR_MESSAGE
 
         # Token usage statistics and cost estimation - use client method
         if client and hasattr(client, "format_token_usage_summary"):
@@ -245,12 +279,11 @@ class OutputFormatter:
             },
         }
 
-    def format_miro_summary_and_log(
+    def build_miro_payload(
         self,
         final_answer_text: str,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
-        client=None,
-    ) -> Tuple[str, str, str]:
+    ) -> Dict[str, Any]:
         allowed_sources = self._collect_allowed_sources(tool_calls)
         payload = self._extract_json_block(final_answer_text) or self._build_default_miro_payload(
             final_answer_text, allowed_sources
@@ -260,7 +293,6 @@ class OutputFormatter:
         evidence = payload.get("evidence", [])
         confidence = payload.get("confidence", {})
 
-        # Keep only evidence URLs that were actually retrieved in tool calls.
         allowed_urls = {x["url"] for x in allowed_sources if x.get("url")}
         normalized_evidence: List[Dict[str, str]] = []
         if isinstance(evidence, list):
@@ -289,6 +321,30 @@ class OutputFormatter:
         if level not in {"high", "medium", "low"}:
             level = "high" if score >= 80 else ("medium" if score >= 50 else "low")
         reason = str(confidence.get("reason", "")).strip() or "Auto-estimated from evidence quality."
+
+        return {
+            "answer": answer,
+            "evidence": normalized_evidence,
+            "confidence": {
+                "score": score,
+                "level": level,
+                "reason": reason,
+            },
+        }
+
+    def format_miro_summary_and_log(
+        self,
+        final_answer_text: str,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
+        client=None,
+    ) -> Tuple[str, str, str]:
+        payload = self.build_miro_payload(final_answer_text, tool_calls)
+        answer = str(payload.get("answer", "")).strip() or "No reliable answer."
+        normalized_evidence = payload.get("evidence", [])
+        confidence = payload.get("confidence", {})
+        score = confidence.get("score", 20)
+        level = confidence.get("level", "low")
+        reason = confidence.get("reason", "Auto-estimated from evidence quality.")
 
         summary_lines = []
         summary_lines.append("\n" + "=" * 30 + " Final Answer " + "=" * 30)

@@ -731,6 +731,7 @@ class Orchestrator:
             temp_summary_prompt = generate_agent_summarize_prompt(
                 task_description,
                 agent_type=sub_agent_name,
+                api_friendly=bool(self.cfg.agent.get("api_friendly", False)),
             )
 
             pass_length_check, message_history = self.llm_client.ensure_summary_context(
@@ -770,6 +771,7 @@ class Orchestrator:
         summary_prompt = generate_agent_summarize_prompt(
             task_description,
             agent_type=sub_agent_name,
+            api_friendly=bool(self.cfg.agent.get("api_friendly", False)),
         )
 
         if message_history[-1]["role"] == "user":
@@ -1256,6 +1258,7 @@ class Orchestrator:
                 task_description,
                 agent_type="main",
                 output_mode=self.cfg.agent.get("output_mode", "report"),
+                api_friendly=bool(self.cfg.agent.get("api_friendly", False)),
             )
 
             pass_length_check, message_history = self.llm_client.ensure_summary_context(

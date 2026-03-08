@@ -210,6 +210,8 @@ __marimo__/
 # -- ADDED --
 # Log files
 logs/
+*.stdout.log
+*.stderr.log
 
 # Data directory - exclude everything except README
 data/

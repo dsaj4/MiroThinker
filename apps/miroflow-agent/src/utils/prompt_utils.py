@@ -77,7 +77,7 @@ mcp_tags = [
 
 refusal_keywords = [
     "time constraint",
-    "I鈥檓 sorry, but I can鈥檛",
+    "I'm sorry, but I can't",
     "I'm sorry, I cannot solve",
 ]
 
@@ -234,7 +234,10 @@ Do not infer, speculate, summarize broadly, or attempt to fill in missing parts 
 
 
 def generate_agent_summarize_prompt(
-    task_description, agent_type="", output_mode: str = "report"
+    task_description,
+    agent_type="",
+    output_mode: str = "report",
+    api_friendly: bool = False,
 ):
     """
     Generate the final summarization prompt for an agent.
@@ -246,6 +249,7 @@ def generate_agent_summarize_prompt(
         task_description: The original task/question to reference in the summary
         agent_type: Type of agent ("main" or "agent-browsing")
         output_mode: Output mode ("report", "search_data", "miro")
+        api_friendly: Whether to relax final-answer formatting for external API calls
 
     Returns:
         Summarization prompt string with formatting instructions
@@ -277,8 +281,14 @@ def generate_agent_summarize_prompt(
                 "- Do NOT output markdown or code fences.\n"
                 "- Evidence URLs must come from already retrieved sources in conversation.\n"
                 "- Keep answer concise and follow original format constraints.\n"
-                "- If evidence is weak, lower confidence."
+                "- If evidence is weak, lower confidence.\n"
             )
+            if api_friendly:
+                summarize_prompt += (
+                    "- This response is for API consumption, so prefer stable JSON over stylistic prose.\n"
+                    "- For trivial or common-knowledge tasks, you may return an empty evidence list and a lower confidence score instead of forcing fake citations.\n"
+                    "- If the answer is already obvious from prior conversation, extract it directly and keep the JSON valid.\n"
+                )
         else:
             summarize_prompt = (
                 "Summarize the above conversation, and output the FINAL ANSWER to the original question.\n\n"
@@ -303,6 +313,14 @@ def generate_agent_summarize_prompt(
                 "You can only answer the original question based on the information already retrieved and your own internal knowledge.\n"
                 "If you attempt to call any tool, it will be considered a mistake."
             )
+            if api_friendly:
+                summarize_prompt += (
+                    "\n\nAPI-friendly rules:\n"
+                    "- Prefer returning the shortest correct final answer directly.\n"
+                    "- If \\boxed{} is missed, a plain direct answer on its own final line is acceptable.\n"
+                    "- Do not add narrative padding, disclaimers, or repeated restatement.\n"
+                    "- For simple tasks, extract the answer that is already present instead of re-deriving it.\n"
+                )
     elif agent_type == "agent-browsing":
         summarize_prompt = (
             "This is a direct instruction to you (the assistant), not the result of a tool call.\n\n"

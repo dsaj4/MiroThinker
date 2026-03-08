@@ -204,3 +204,27 @@
 ### 2026-03-07 08:32:23 | task=A_009
 - Search depth this run: 7 search-related tool calls.
 - Effective retrieval pattern observed in 7 search calls.
+
+### 2026-03-08 00:19:42 | task=api_d82d34558a8a
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:20:01 | task=api_457ac9178683
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:26:28 | task=api_37ae9aef4ee1
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:26:45 | task=api_9a440e405800
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:41:45 | task=api_cc941c0c91ce
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:41:51 | task=api_0aa1dd35c0a0
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:49:20 | task=api_9ffd7d71e902
+- No search-specific signal captured; prioritize explicit decomposition next run.
+
+### 2026-03-08 00:49:28 | task=api_072200546b3e
+- No search-specific signal captured; prioritize explicit decomposition next run.

@@ -75,6 +75,36 @@ class AnswerGenerator:
         self.max_final_answer_retries = (
             DEFAULT_MAX_FINAL_ANSWER_RETRIES if cfg.agent.keep_tool_result == -1 else 1
         )
+        self.api_friendly = bool(cfg.agent.get("api_friendly", False))
+
+    def _message_content_to_text(self, content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+            return "\n".join(parts)
+        return ""
+
+    def _has_recoverable_answer_signal(
+        self, message_history: List[Dict[str, Any]], output_mode: str
+    ) -> bool:
+        for message in reversed(message_history):
+            if message.get("role") != "assistant":
+                continue
+            text = self._message_content_to_text(message.get("content"))
+            if not text.strip():
+                continue
+            if output_mode == "miro":
+                if self.output_formatter._extract_json_block(text) is not None:
+                    return True
+            if self.output_formatter._extract_boxed_content(text):
+                return True
+            if self.output_formatter._extract_plain_answer_fallback(text):
+                return True
+        return False
 
     async def handle_llm_call(
         self,
@@ -279,6 +309,7 @@ class AnswerGenerator:
             task_description,
             agent_type="main",
             output_mode=output_mode,
+            api_friendly=self.api_friendly,
         )
 
         if message_history[-1]["role"] == "user":
@@ -516,7 +547,17 @@ class AnswerGenerator:
         # CASE: Context management ON + reached max turns + NOT final retry
         # Skip answer generation entirely - any answer would be a blind guess
         # But if this is the final retry, we still try to generate an answer (last chance)
-        if context_management_enabled and reached_max_turns and not is_final_retry:
+        output_mode = self.cfg.agent.get("output_mode", "report")
+        has_recoverable_answer = self._has_recoverable_answer_signal(
+            message_history, output_mode
+        )
+
+        if (
+            context_management_enabled
+            and reached_max_turns
+            and not is_final_retry
+            and not has_recoverable_answer
+        ):
             self.task_log.log_step(
                 "info",
                 "Main Agent | Final Answer (Context Management Mode)",

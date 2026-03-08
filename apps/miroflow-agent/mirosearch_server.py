@@ -15,6 +15,9 @@ from omegaconf import OmegaConf
 from src.logging.task_logger import TaskLog, get_utc_plus_8_time
 from src.memory.mirosearch_service import MirosearchService
 
+APP_DIR = Path(__file__).resolve().parent
+CONF_PATH = APP_DIR / "conf" / "config.yaml"
+
 
 class SearchRequest(BaseModel):
     query: str
@@ -23,15 +26,14 @@ class SearchRequest(BaseModel):
 
 class MirosearchApp:
     def __init__(self):
-        cfg_path = Path("conf/config.yaml")
-        cfg = OmegaConf.load(cfg_path)
+        cfg = OmegaConf.load(CONF_PATH)
         memory_cfg = dict(cfg.get("memory", {}))
-        root_dir = Path(memory_cfg.get("root_dir", "../../memory")).resolve()
+        root_dir = (APP_DIR / memory_cfg.get("root_dir", "../../memory")).resolve()
         index_dir = root_dir / "index"
         index_dir.mkdir(parents=True, exist_ok=True)
 
         self.task_log = TaskLog(
-            log_dir=str(Path(cfg.get("debug_dir", "../../logs/debug")).resolve()),
+            log_dir=str((APP_DIR / cfg.get("debug_dir", "../../logs/debug")).resolve()),
             task_id=f"mirosearch_service_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             start_time=get_utc_plus_8_time(),
         )
