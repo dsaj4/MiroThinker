@@ -30,7 +30,7 @@ _PROVIDERS: dict[str, tuple[str, str]] = {
 # Default model for each provider (mirrors the __init__ defaults in each class).
 # Kept here so callers can resolve the effective model without importing heavy deps.
 DEFAULT_MODELS: dict[str, str] = {
-    "openai": "text-embedding-3-small",
+    "openai": "text-embedding-v4",
     "google": "gemini-embedding-001",
     "voyage": "voyage-3-lite",
     "ollama": "nomic-embed-text",

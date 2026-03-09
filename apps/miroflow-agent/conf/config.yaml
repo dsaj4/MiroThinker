@@ -29,4 +29,4 @@ memory:
   milvus_token: ${oc.env:MILVUS_TOKEN, ""}
   collection: "mirothinker_memory"
   embedding_provider: "openai"
-  embedding_model: null
+  embedding_model: "text-embedding-v4"
